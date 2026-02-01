@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+data/raw/
+data/processed/
+data/outputs/
+.ipynb_checkpoints/
+*.log
+logs/
+.pytest_cache/
+dist/
+*.egg-info/
+# Never commit AWS credentials
+.aws/
+credentials
