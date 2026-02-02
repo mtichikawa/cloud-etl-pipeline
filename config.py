@@ -78,3 +78,5 @@ def s3_manifest_key(date_str: str) -> str:
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Cities list: 10 US cities with lat/lon/timezone
