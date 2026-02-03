@@ -164,3 +164,5 @@ if __name__ == "__main__":
     for r in records:
         print(f"  {r['city']:<20} temp_mean={r.get('temperature_2m_mean')}°C  "
               f"precip={r.get('precipitation_sum')}mm")
+
+# extract_city_weather(): Open-Meteo archive API with tenacity retry
