@@ -166,3 +166,5 @@ if __name__ == "__main__":
               f"precip={r.get('precipitation_sum')}mm")
 
 # extract_city_weather(): Open-Meteo archive API with tenacity retry
+
+# extract_all_cities(): parallel fetch for all 10 cities
