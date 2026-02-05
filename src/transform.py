@@ -237,3 +237,5 @@ if __name__ == "__main__":
     ]
     df = transform_records(synthetic)
     print(df.T)
+
+# heat_index_celsius(): Rothfusz formula implementation
