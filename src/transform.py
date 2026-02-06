@@ -239,3 +239,5 @@ if __name__ == "__main__":
     print(df.T)
 
 # heat_index_celsius(): Rothfusz formula implementation
+
+# transform_records(): full enrichment pipeline with anomaly flags
