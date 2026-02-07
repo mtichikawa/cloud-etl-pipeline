@@ -241,3 +241,5 @@ if __name__ == "__main__":
 # heat_index_celsius(): Rothfusz formula implementation
 
 # transform_records(): full enrichment pipeline with anomaly flags
+
+# df_to_parquet_bytes(): pyarrow Snappy compression for S3
