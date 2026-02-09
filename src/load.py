@@ -218,3 +218,5 @@ class S3Loader:
             return []
 
 # S3Loader class: upload_raw() with Hive-partitioned keys
+
+# upload_processed(): Parquet to S3 + DynamoDB run logging
