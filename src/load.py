@@ -216,3 +216,5 @@ class S3Loader:
         except ClientError as e:
             log.error(f"Could not list processed dates: {e}")
             return []
+
+# S3Loader class: upload_raw() with Hive-partitioned keys
