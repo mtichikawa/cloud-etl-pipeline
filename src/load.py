@@ -220,3 +220,5 @@ class S3Loader:
 # S3Loader class: upload_raw() with Hive-partitioned keys
 
 # upload_processed(): Parquet to S3 + DynamoDB run logging
+
+# LOCAL_MODE: skip all AWS calls, write to data/ directories
