@@ -158,3 +158,4 @@ def lambda_handler(event, context):
     }
 
 # lambda_handler(): validate Parquet schema, write S3 manifest
+# note: see README for usage examples
