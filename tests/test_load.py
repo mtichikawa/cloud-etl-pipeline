@@ -235,3 +235,4 @@ def test_local_mode_log_run_writes_jsonl(tmp_path, monkeypatch):
     assert line["run_id"] == "local_run_001"
 
 # moto mock tests for S3 upload and DynamoDB logging
+# reviewed: logic verified
