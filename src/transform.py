@@ -78,6 +78,7 @@ def heat_index_celsius(temp_c: float, humidity_pct: float = 50.0) -> float:
 def precipitation_category(mm: Optional[float]) -> str:
     if mm is None or np.isnan(mm):
         return "unknown"
+    if mm < 0:          return "invalid"  # sensor error guard
     if mm == 0:         return "none"
     if mm < 5:          return "light"
     if mm < 20:         return "moderate"
