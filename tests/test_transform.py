@@ -101,21 +101,21 @@ def test_transform_precipitation_category():
     records = [make_record(precipitation_sum=25.0)]
     df = transform_records(records)
     assert df["precipitation_category"].iloc[0] == "heavy"
-    assert df["is_heavy_rain"].iloc[0] is True
+    assert df["is_heavy_rain"].iloc[0] == True
 
 
 def test_transform_heavy_rain_flag():
     df_light = transform_records([make_record(precipitation_sum=3.0)])
     df_heavy = transform_records([make_record(precipitation_sum=25.0)])
-    assert df_light["is_heavy_rain"].iloc[0] is False
-    assert df_heavy["is_heavy_rain"].iloc[0] is True
+    assert df_light["is_heavy_rain"].iloc[0] == False
+    assert df_heavy["is_heavy_rain"].iloc[0] == True
 
 
 def test_transform_high_wind_flag():
     df_calm  = transform_records([make_record(wind_speed_10m_max=20.0)])
     df_windy = transform_records([make_record(wind_speed_10m_max=90.0)])
-    assert df_calm["is_high_wind"].iloc[0] is False
-    assert df_windy["is_high_wind"].iloc[0] is True
+    assert df_calm["is_high_wind"].iloc[0] == False
+    assert df_windy["is_high_wind"].iloc[0] == True
 
 
 def test_transform_run_id_assigned():
@@ -149,8 +149,8 @@ def test_transform_empty_records():
 def test_transform_none_values_handled():
     records = [make_record(precipitation_sum=None, wind_speed_10m_max=None)]
     df = transform_records(records)
-    assert df["is_heavy_rain"].iloc[0] is False
-    assert df["is_high_wind"].iloc[0] is False
+    assert df["is_heavy_rain"].iloc[0] == False
+    assert df["is_high_wind"].iloc[0] == False
 
 
 def test_transform_anomaly_with_historical():
@@ -161,7 +161,7 @@ def test_transform_anomaly_with_historical():
     # Now a 35°C day should be flagged as extreme
     extreme_record = [make_record(temperature_2m_mean=35.0)]
     df = transform_records(extreme_record, historical_df=hist_df)
-    assert df["is_extreme_temp"].iloc[0] is True
+    assert df["is_extreme_temp"].iloc[0] == True
 
 
 # ── Parquet serialization ─────────────────────────────────────────────────────

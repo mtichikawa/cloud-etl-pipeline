@@ -150,7 +150,7 @@ def test_upload_empty_df_returns_none(aws_setup):
 
 # ── DynamoDB tests ─────────────────────────────────────────────────────────────
 
-def test_log_run_to_dynamodb(aws_setup):
+def test_log_run_to_dynamodb():
     from moto import mock_aws
     import boto3, config
     with mock_aws():
