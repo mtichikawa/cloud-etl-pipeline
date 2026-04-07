@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import boto3
+import pandas as pd
 from botocore.exceptions import ClientError
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
