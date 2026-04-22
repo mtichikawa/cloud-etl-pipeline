@@ -108,7 +108,6 @@ def run_pipeline(target_date: str) -> dict:
     except Exception as e:
         log.warning(f"Could not load historical data: {e} — proceeding without anomaly flags")
 
-    import pandas as pd
     df = transform_records(records, run_id=run_id, historical_df=historical_df)
 
     # ── Stage 3: Load ─────────────────────────────────────────────────────────
