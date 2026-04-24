@@ -60,7 +60,7 @@ def invoke_lambda(run_meta: dict) -> dict:
         return {"error": str(e)}
 
 
-def run_pipeline(target_date: str) -> dict:
+def run_pipeline(target_date: str) -> dict:  # keys: run_id, date, status, cities_extracted, extreme_events, duration_seconds
     """
     Execute the full ETL pipeline for one date.
 
