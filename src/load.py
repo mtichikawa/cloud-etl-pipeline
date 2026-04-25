@@ -11,6 +11,7 @@ Usage:
     loader.log_run(run_meta)
 """
 
+import io
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ from typing import Optional
 
 import boto3
 import pandas as pd
+import pyarrow.parquet as pq
 from botocore.exceptions import ClientError
 
 import sys
