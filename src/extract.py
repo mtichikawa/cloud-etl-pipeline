@@ -39,7 +39,17 @@ log = logging.getLogger("extract")
     reraise=True,
 )
 def _get_with_retry(url: str, params: dict, timeout: int = 15) -> dict:
-    """GET request with exponential backoff retry on network errors."""
+    """
+    GET request with exponential backoff retry on network errors.
+
+    Args:
+        url:     Full URL to request.
+        params:  Query parameters dict passed to requests.get.
+        timeout: Per-request timeout in seconds (default 15).
+
+    Returns:
+        Parsed JSON response as dict.
+    """
     resp = requests.get(url, params=params, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
