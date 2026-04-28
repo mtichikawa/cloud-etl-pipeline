@@ -167,8 +167,6 @@ class S3Loader:
 
     def read_processed(self, target_date: str) -> Optional[pd.DataFrame]:
         """Download and read a processed Parquet file from S3."""
-        import io
-        import pyarrow.parquet as pq
 
         key = config.s3_processed_key(target_date)
 
