@@ -48,15 +48,47 @@ Cloud data pipelines are the backbone of production data engineering. This proje
 │         │                                                   │
 │  2. transform.py ──► pandas + pyarrow                      │
 │         │                                                   │
-│  3. load.py ──► S3 (partitioned Parquet)                   │
+│  2.5 validate.py ──► row-level DQ rules                    │
+│         ├─► clean rows  ──┐                                │
+│         └─► failed rows ──┴─► quarantine/ on S3            │
+│         │                                                   │
+│  3. load.py ──► S3 (partitioned Parquet, clean rows only)  │
 │         │                                                   │
 │  4. boto3 invoke ──► Lambda function                       │
 │                          │                                  │
 │                     Validate + write manifest               │
 │                     CloudWatch Logs                         │
-│                     DynamoDB run record                     │
+│                     DynamoDB run record (incl. DQ report)  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Data quality validation layer
+
+Between transform and load, a `RecordValidator` applies a list of typed `Rule`
+objects to the DataFrame. Rules return a boolean mask per row; failing rows
+are routed to a parallel `quarantine/` path on S3 (Hive-partitioned the same
+way as the main path) instead of being silently dropped or polluting the
+clean output.
+
+Each rule has a severity:
+
+- `error` — failing rows are quarantined and NOT loaded to the main path.
+  Used for physical impossibilities (negative precipitation, temperature
+  outside −90/+60 °C, malformed date).
+- `warn` — failures are counted in the DQ report but rows still load.
+  Used for soft signals (unknown city) where dropping the row would be
+  more wrong than keeping it.
+
+The DQ report (rule-by-rule failure counts, severity flags, total
+quarantined) is written as a JSON sidecar next to the quarantine Parquet
+and is also embedded in the DynamoDB run record so failures are auditable
+later without re-running the pipeline.
+
+This is structurally different from the post-load validation already done
+by the Lambda function: the in-pipeline layer catches bad data **before**
+it lands in the main path; the Lambda layer cross-checks the loaded file
+against schema expectations. Both run; the in-pipeline layer is faster
+feedback (fail-fast at write time) and the Lambda layer is the safety net.
 
 ---
 
@@ -72,7 +104,8 @@ cloud-etl-pipeline/
 │   ├── __init__.py
 │   ├── extract.py               # API extraction with retry logic
 │   ├── transform.py             # pandas transforms, derived metrics
-│   ├── load.py                  # S3 upload, Parquet serialization
+│   ├── validate.py              # In-pipeline DQ rules + quarantine routing
+│   ├── load.py                  # S3 upload, Parquet serialization, quarantine
 │   └── pipeline.py              # End-to-end orchestrator
 ├── infra/
 │   ├── lambda_function.py       # Lambda handler (deploy to AWS)
@@ -85,6 +118,7 @@ cloud-etl-pipeline/
 │   ├── __init__.py
 │   ├── test_extract.py          # Mocked API tests
 │   ├── test_transform.py        # Transform unit tests
+│   ├── test_validate.py         # DQ validation rules + RecordValidator
 │   └── test_load.py             # Moto S3 mock tests
 ├── scripts/
 │   ├── backfill.py              # Replay 60 days of historical data

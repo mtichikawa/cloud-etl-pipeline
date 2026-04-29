@@ -163,6 +163,78 @@ class S3Loader:
             log.error(f"DynamoDB log failed: {e}")
             return False
 
+    # ── S3 quarantine upload ───────────────────────────────────────────────────
+
+    def upload_quarantine(
+        self,
+        df: pd.DataFrame,
+        target_date: str,
+        dq_report: dict,
+    ) -> Optional[str]:
+        """
+        Write rows that failed validation to a parallel S3 path so they're not
+        lost. Same Hive-style partitioning as the main processed path. A
+        sidecar JSON next to the Parquet records the rule-failure breakdown
+        from the DQ report so it's auditable later.
+
+        Returns the S3 URI (or local path) of the quarantine Parquet, or
+        None if df was empty / write failed.
+        """
+        if df.empty:
+            return None
+
+        compact = target_date.replace("-", "")
+        y, m, d = target_date[:4], target_date[5:7], target_date[8:10]
+        key_parquet = (
+            f"quarantine/weather_enriched/year={y}/month={m}/day={d}/"
+            f"quarantine_{compact}.parquet"
+        )
+        key_sidecar = (
+            f"quarantine/weather_enriched/year={y}/month={m}/day={d}/"
+            f"quarantine_{compact}.json"
+        )
+
+        if self.local_mode:
+            quarantine_dir = config.PROCESSED_DIR.parent / "quarantine"
+            quarantine_dir.mkdir(parents=True, exist_ok=True)
+            parquet_path = quarantine_dir / f"quarantine_{compact}.parquet"
+            sidecar_path = quarantine_dir / f"quarantine_{compact}.json"
+            df.to_parquet(parquet_path, index=False)
+            sidecar_path.write_text(json.dumps(dq_report, indent=2))
+            log.warning(
+                f"Quarantined {len(df)} rows locally: {parquet_path}"
+            )
+            return str(parquet_path)
+
+        try:
+            parquet_bytes = df_to_parquet_bytes(df)
+            self.s3.put_object(
+                Bucket=config.S3_BUCKET,
+                Key=key_parquet,
+                Body=parquet_bytes,
+                ContentType="application/octet-stream",
+                Metadata={
+                    "date": target_date,
+                    "row_count": str(len(df)),
+                    "reason": "dq_validation_failure",
+                },
+            )
+            self.s3.put_object(
+                Bucket=config.S3_BUCKET,
+                Key=key_sidecar,
+                Body=json.dumps(dq_report, indent=2).encode("utf-8"),
+                ContentType="application/json",
+            )
+            uri = f"s3://{config.S3_BUCKET}/{key_parquet}"
+            log.warning(
+                f"Quarantined {len(df)} rows to {uri} "
+                f"({len(parquet_bytes)/1024:.1f} KB)"
+            )
+            return uri
+        except ClientError as e:
+            log.error(f"Failed to upload quarantine Parquet: {e}")
+            return None
+
     # ── S3 read-back ───────────────────────────────────────────────────────────
 
     def read_processed(self, target_date: str) -> Optional[pd.DataFrame]:

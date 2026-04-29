@@ -28,6 +28,7 @@ import config
 from src.extract import extract_all_cities
 from src.transform import transform_records
 from src.load import S3Loader
+from src.validate import RecordValidator, standard_weather_rules
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
@@ -110,13 +111,35 @@ def run_pipeline(target_date: str) -> dict:  # keys: run_id, date, status, citie
 
     df = transform_records(records, run_id=run_id, historical_df=historical_df)
 
+    # ── Stage 2.5: Validate ──────────────────────────────────────────────────
+    # In-pipeline data quality layer. Records that fail 'error'-severity rules
+    # are routed to the quarantine path on S3 instead of being silently dropped.
+    log.info("Stage 2.5/3: Validate")
+    validator = RecordValidator(standard_weather_rules())
+    clean_df, quarantined_df, dq_report = validator.apply(df)
+    log.info(
+        f"DQ: {dq_report['passed']}/{dq_report['row_count']} passed, "
+        f"{dq_report['quarantined']} quarantined "
+        f"(rule failures: {dq_report['rule_failures']})"
+    )
+
+    quarantine_uri = None
+    if not quarantined_df.empty:
+        quarantine_uri = loader.upload_quarantine(
+            quarantined_df, target_date, dq_report
+        )
+
     # ── Stage 3: Load ─────────────────────────────────────────────────────────
     log.info("Stage 3/3: Load")
-    processed_uri = loader.upload_processed(df, target_date)
+    processed_uri = loader.upload_processed(clean_df, target_date)
 
     # ── Post-pipeline ─────────────────────────────────────────────────────────
     duration = time.perf_counter() - t_start
-    extreme_events = int(df["is_extreme_temp"].sum() + df["is_heavy_rain"].sum() + df["is_high_wind"].sum())
+    extreme_events = int(
+        clean_df["is_extreme_temp"].sum()
+        + clean_df["is_heavy_rain"].sum()
+        + clean_df["is_high_wind"].sum()
+    )
 
     run_meta = {
         "run_id":            run_id,
@@ -126,6 +149,8 @@ def run_pipeline(target_date: str) -> dict:  # keys: run_id, date, status, citie
         "extreme_events":    extreme_events,
         "raw_keys":          raw_keys,
         "processed_uri":     processed_uri or "",
+        "quarantine_uri":    quarantine_uri or "",
+        "dq_report":         dq_report,
         "duration_seconds":  round(duration, 2),
         "status":            "success" if processed_uri else "partial",
     }
