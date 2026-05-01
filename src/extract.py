@@ -140,7 +140,7 @@ def extract_all_cities(target_date: str) -> list[dict]:
         record = extract_city_weather(city_name, lat, lon, tz, target_date)
         if record:
             records.append(record)
-        time.sleep(0.15)  # polite rate limiting — Open-Meteo allows ~10k req/day free
+        time.sleep(0.15)  # Open-Meteo free tier: ~10k req/day; 150ms keeps burst rate well below limit
 
     log.info(f"Extracted {len(records)}/{len(config.CITIES)} cities successfully.")
     return records
