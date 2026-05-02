@@ -80,6 +80,40 @@ def validate_parquet_schema(s3_client, bucket: str, key: str) -> dict:
         }
 
 
+def read_quarantine_sidecar(s3_client, bucket: str, target_date: str) -> dict:
+    """
+    Read the quarantine sidecar JSON written by the in-pipeline DQ layer.
+
+    The orchestrator (src/pipeline.py) writes a parallel Parquet at
+    quarantine/weather_enriched/year=Y/month=M/day=D/quarantine_<date>.parquet
+    plus a sidecar JSON at the same path with the rule-failure breakdown.
+    This Lambda reads the sidecar to surface DQ counts in the manifest
+    and to flag the run if quarantine exceeds a threshold.
+
+    Returns an empty dict if no sidecar exists (no quarantine that day).
+    """
+    compact = target_date.replace("-", "")
+    y, m, d = target_date[:4], target_date[5:7], target_date[8:10]
+    key = (
+        f"quarantine/weather_enriched/year={y}/month={m}/day={d}/"
+        f"quarantine_{compact}.json"
+    )
+    try:
+        obj = s3_client.get_object(Bucket=bucket, Key=key)
+        return json.loads(obj["Body"].read())
+    except s3_client.exceptions.NoSuchKey:
+        return {}
+    except Exception as e:
+        log.warning(f"Could not read quarantine sidecar at {key}: {e}")
+        return {}
+
+
+# Threshold above which quarantine-rate is treated as a run-level failure.
+# 5% of rows quarantined is the hard ceiling — beyond that something
+# upstream is broken (extract API drift, transform regression, etc.).
+QUARANTINE_FAILURE_THRESHOLD = 0.05
+
+
 def write_manifest(s3_client, bucket: str, run_meta: dict, validation: dict) -> str:
     """Write a JSON manifest summarizing this pipeline run to S3."""
     target_date = run_meta.get("date", "unknown")
@@ -93,6 +127,8 @@ def write_manifest(s3_client, bucket: str, run_meta: dict, validation: dict) -> 
         "cities_failed":     run_meta.get("cities_failed", 0),
         "extreme_events":    run_meta.get("extreme_events", 0),
         "processed_uri":     run_meta.get("processed_uri", ""),
+        "quarantine_uri":    run_meta.get("quarantine_uri", ""),
+        "dq_report":         run_meta.get("dq_report", {}),
         "validation":        validation,
         "pipeline_status":   run_meta.get("status", "unknown"),
     }
@@ -128,13 +164,36 @@ def lambda_handler(event, context):
     bucket = uri_parts[0]
     key = uri_parts[1] if len(uri_parts) > 1 else ""
 
-    # Validate
+    # Validate the loaded Parquet
     log.info(f"Validating: s3://{bucket}/{key}")
     validation = validate_parquet_schema(s3, bucket, key)
 
     log.info(f"Validation result: passed={validation['validation_passed']}, "
              f"rows={validation.get('row_count', 0)}, "
              f"cities={len(validation.get('cities_present', []))}")
+
+    # Cross-check the in-pipeline DQ layer (added 2026-04-28)
+    target_date = event.get("date", "")
+    dq_sidecar = read_quarantine_sidecar(s3, bucket, target_date)
+    if dq_sidecar:
+        clean_rows = validation.get("row_count", 0)
+        quarantined = dq_sidecar.get("quarantined", 0)
+        total = clean_rows + quarantined
+        rate = (quarantined / total) if total > 0 else 0.0
+        validation["quarantine_count"] = quarantined
+        validation["quarantine_rate"] = round(rate, 4)
+        validation["quarantine_rule_failures"] = dq_sidecar.get("rule_failures", {})
+        log.info(
+            f"DQ cross-check: clean={clean_rows}, quarantined={quarantined}, "
+            f"rate={rate:.2%}"
+        )
+        if rate > QUARANTINE_FAILURE_THRESHOLD:
+            validation["validation_passed"] = False
+            validation["failure_reason"] = (
+                f"Quarantine rate {rate:.2%} exceeds "
+                f"{QUARANTINE_FAILURE_THRESHOLD:.0%} threshold"
+            )
+            log.error(f"DQ THRESHOLD EXCEEDED: {validation['failure_reason']}")
 
     if not validation["validation_passed"]:
         log.error(f"VALIDATION FAILED: {validation.get('failure_reason')}")
