@@ -7,8 +7,8 @@ Tests run entirely in-process, no network required.
 
 import json
 import os
-import pytest
 import pandas as pd
+import pytest
 
 # Must set fake AWS creds before moto imports
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
