@@ -19,6 +19,7 @@ os.environ.setdefault("AWS_SESSION_TOKEN", "testing")
 
 import sys
 from pathlib import Path
+from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -84,7 +85,7 @@ def sample_records():
 
 # ── S3 upload tests ────────────────────────────────────────────────────────────
 
-def test_upload_raw_to_s3(aws_setup, sample_records):
+def test_upload_raw_to_s3(aws_setup: Any, sample_records):
     from moto import mock_aws
     import boto3, config
     with mock_aws():
