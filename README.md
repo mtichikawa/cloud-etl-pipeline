@@ -248,3 +248,5 @@ Separating validation from ingestion. The Lambda runs independently of the orche
 
 **Why moto for tests?**
 moto intercepts boto3 calls and simulates AWS services locally. This means tests run in CI/CD without an AWS account, without incurring costs, and without flaky network dependencies.
+
+> _Note: setting `LOCAL_MODE=true` bypasses all AWS calls — useful for offline development and CI. The pipeline writes Parquet to a local `data/` directory and skips the Lambda validation step._
