@@ -2,7 +2,8 @@
 src/transform.py — Data transformation layer.
 
 Converts raw API records into an enriched, analysis-ready DataFrame
-with derived metrics, anomaly flags, and AQI categories.
+with derived metrics (temperature range, heat index), precipitation and
+wind categories, and anomaly flags (extreme temperature, heavy rain, high wind).
 Outputs Parquet format for efficient S3 storage and querying.
 
 Usage:
