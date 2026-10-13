@@ -1,6 +1,6 @@
 # Cloud ETL Pipeline
 
-An end-to-end **AWS cloud data pipeline** that extracts public weather and air quality data, transforms it with pandas, loads processed datasets into **S3**, and triggers serverless processing via **AWS Lambda**. Orchestrated locally with boto3 and designed to run on AWS Free Tier.
+An end-to-end **AWS cloud data pipeline** that extracts public weather data, transforms it with pandas, loads processed datasets into **S3**, and triggers serverless processing via **AWS Lambda**. Orchestrated locally with boto3 and designed to run on AWS Free Tier.
 
 ---
 
@@ -12,11 +12,11 @@ Cloud data pipelines are the backbone of production data engineering. This proje
 
 ## What This Project Does
 
-1. **Extracts** hourly weather data (Open-Meteo API, free, no key required) and NOAA air quality readings for 10 US cities
-2. **Transforms** raw JSON/CSV into clean, enriched Parquet files with derived metrics (heat index, AQI category, anomaly flags)
+1. **Extracts** daily weather summaries from the Open-Meteo API (free, no key required) for 10 US cities
+2. **Transforms** raw JSON into clean, enriched Parquet files with derived metrics (heat index, precipitation and wind categories, extreme-weather flags)
 3. **Loads** processed files to S3 with a structured `year=/month=/day=` Hive-partitioned prefix
 4. **Triggers** an AWS Lambda function that runs lightweight validation and writes a summary manifest
-5. **Monitors** pipeline runs via CloudWatch Logs and a local run log written to DynamoDB
+5. **Monitors** pipeline runs via CloudWatch Logs and a run record written to DynamoDB
 6. **Replays** historical data with a backfill script that simulates 60 days of prior pipeline runs
 
 ---
@@ -32,9 +32,8 @@ Cloud data pipelines are the backbone of production data engineering. This proje
 | SDK | boto3 |
 | Data processing | pandas, pyarrow (Parquet) |
 | HTTP extraction | requests, tenacity (retries) |
-| Schema validation | pydantic |
 | Testing | pytest, moto (AWS mock) |
-| Local orchestration | Python scheduler + cron |
+| Local orchestration | Python CLI (`src/pipeline.py`) |
 
 ---
 
@@ -44,7 +43,7 @@ Cloud data pipelines are the backbone of production data engineering. This proje
 ┌─────────────────────────────────────────────────────────────┐
 │  Local Orchestrator (pipeline.py)                           │
 │                                                             │
-│  1. extract.py ──► Open-Meteo API + NOAA API               │
+│  1. extract.py ──► Open-Meteo API                          │
 │         │                                                   │
 │  2. transform.py ──► pandas + pyarrow                      │
 │         │                                                   │
@@ -194,32 +193,21 @@ s3://mtichikawa-weather-etl/
 | Column | Type | Description |
 |---|---|---|
 | city | string | City name |
-| date | date | Observation date |
+| date | string | Observation date (YYYY-MM-DD) |
 | avg_temp_c | float | Daily average temperature (°C) |
 | max_temp_c | float | Daily maximum temperature (°C) |
 | min_temp_c | float | Daily minimum temperature (°C) |
 | precipitation_mm | float | Total precipitation |
-| wind_speed_max | float | Max wind speed (km/h) |
-| heat_index | float | Derived: apparent temperature |
-| temp_anomaly | float | Deviation from 30-day rolling mean |
-| is_extreme | bool | True if temp >2σ from rolling mean |
-| aqi_category | string | Air quality category (Good/Moderate/etc.) |
-| run_id | string | Pipeline run UUID for lineage |
+| wind_speed_max_kmh | float | Max wind speed (km/h) |
+| heat_index | float | Derived: apparent temperature (assumes 50% humidity) |
+| precipitation_category | string | none / light / moderate / heavy / extreme |
+| wind_category | string | calm / breezy / windy / strong / storm |
+| is_extreme_temp | bool | True if avg temp is more than 2σ from the city's prior 30 days |
+| is_heavy_rain | bool | True if precipitation ≥ 20 mm |
+| is_high_wind | bool | True if max wind ≥ 80 km/h |
+| run_id | string | Pipeline run ID for lineage |
 
----
-
-## Key Results (60-day backfill)
-
-| Metric | Value |
-|---|---|
-| Cities tracked | 10 |
-| Days of data | 60 |
-| Total records | 600 |
-| Parquet files written to S3 | 60 |
-| Extreme weather events flagged | 23 |
-| Lambda invocations | 60 |
-| Avg pipeline run time | 4.2 seconds |
-| Total S3 storage used | ~1.8 MB |
+Other columns: latitude, longitude, timezone, temp_range_c, wind_gusts_max_kmh, solar_radiation_mj, evapotranspiration_mm, city_slug, processed_at.
 
 ---
 
@@ -231,22 +219,5 @@ Set `LOCAL_MODE=true` in your environment to skip all AWS calls and write output
 LOCAL_MODE=true python src/pipeline.py
 ```
 
-In local mode: S3 writes go to `data/processed/`, Lambda invocation is skipped, DynamoDB writes go to a local SQLite file.
+In local mode: raw JSON goes to `data/raw/`, Parquet to `data/processed/`, quarantined rows to `data/quarantine/`, the Lambda invocation is skipped, and the run record is appended to `data/outputs/run_log.jsonl` instead of DynamoDB.
 
----
-
-## Interview Notes
-
-**Why Parquet instead of CSV?**
-Parquet is columnar — when you query `SELECT avg_temp_c WHERE city='New York'`, it reads only that column off disk. For large datasets this is 10-100x faster than CSV. It also stores schema and supports predicate pushdown. It's the standard format for data lakes.
-
-**Why partition by year/month/day?**
-Hive-style partitioning means a query filtered to a single day only scans that day's S3 prefix, not the entire bucket. AWS Glue and Athena both understand this partition scheme natively.
-
-**What's the Lambda for?**
-Separating validation from ingestion. The Lambda runs independently of the orchestrator — if it fails, the data is still in S3 and the pipeline didn't fail. It also demonstrates event-driven architecture: in production you'd trigger Lambda on S3 `PutObject` events rather than calling it explicitly.
-
-**Why moto for tests?**
-moto intercepts boto3 calls and simulates AWS services locally. This means tests run in CI/CD without an AWS account, without incurring costs, and without flaky network dependencies.
-
-> _Note: setting `LOCAL_MODE=true` bypasses all AWS calls — useful for offline development and CI. The pipeline writes Parquet to a local `data/` directory and skips the Lambda validation step._
